@@ -2,8 +2,13 @@ import type { ExtensionAPI } from "../types.js";
 import { isReconScout } from "./classifier.js";
 import { VIBE_MODE_ACTIVE_SYSTEM_PROMPT } from "./prompt.js";
 
-/** Concrete file path with extension; POSIX and Windows backslashes. */
-export const FILE_PATH_RE = /[a-zA-Z0-9_\-\.\\/]+\.[a-zA-Z0-9]{1,6}/;
+/**
+ * Concrete file path: requires a path separator (`/` or `\`) OR a recognized
+ * code/doc extension. Bare dotted tokens like `5.00pm`, `v1.0`, `section 2.4`
+ * must never satisfy the gate.
+ */
+export const FILE_PATH_RE =
+	/(?:[a-zA-Z0-9_\-\.]+[\\/]+[a-zA-Z0-9_\-\.\\/]+\.[a-zA-Z0-9]{1,6}|[a-zA-Z0-9_\-]+\.(?:ts|tsx|js|jsx|mjs|cjs|py|json|md|ya?ml|rs|go|sh|bash|toml|css|html|sql|graphql|proto))\b/i;
 /** Structured brief section headers (## Target Files, ## Current Contract, ...). */
 export const STRUCTURAL_HEADER_RE = /#+\s*(target|contract|change|delta|acceptance|non-goal|verification)/gi;
 
@@ -18,7 +23,7 @@ export const STRUCTURAL_HEADER_RE = /#+\s*(target|contract|change|delta|acceptan
  */
 export function attachVibeGuard(pi: ExtensionAPI): void {
 	// Session-scoped state tracking
-	let directorReadCount = 0;
+	const readPaths = new Set<string>();
 	let todoInitialized = false;
 
 	// 1. Rewrite vibe-mode-context in LLM messages
@@ -35,13 +40,18 @@ export function attachVibeGuard(pi: ExtensionAPI): void {
 	pi.on("tool_call", async (event) => {
 		// Non-vibe and non-spawn tools pass through completely unmodified
 		if (event.toolName === "read") {
-			directorReadCount++;
+			const rawPath = (event.input as { path?: unknown } | undefined)?.path;
+			if (typeof rawPath === "string" && rawPath.length > 0) {
+				const normalized = normalizeReadPath(rawPath);
+				readPaths.add(normalized);
+				readPaths.add(basenameOf(normalized));
+			}
 			return;
 		}
 
 		if (event.toolName === "todo") {
 			const op = (event.input as { op?: unknown } | undefined)?.op;
-			if (op === "init") {
+			if (op === "init" || op === "start") {
 				todoInitialized = true;
 			}
 			return;
@@ -61,7 +71,7 @@ export function attachVibeGuard(pi: ExtensionAPI): void {
 
 			// Implementation worker validation
 			// Gate 1: Director must have inspected files personally
-			if (directorReadCount === 0) {
+			if (readPaths.size === 0) {
 				return {
 					block: true,
 					reason:
@@ -72,7 +82,7 @@ export function attachVibeGuard(pi: ExtensionAPI): void {
 				};
 			}
 
-			// Gate 2: Brief must cite concrete file paths (handles POSIX and Windows backslashes)
+			// Gate 2: Brief must cite concrete file paths (separator or known extension; POSIX and Windows)
 			if (!FILE_PATH_RE.test(prompt)) {
 				return {
 					block: true,
@@ -83,7 +93,30 @@ export function attachVibeGuard(pi: ExtensionAPI): void {
 				};
 			}
 
-			// Gate 3: Brief structure check (at least 2 sections from Target/Contract/Change/Acceptance/Non-Goals)
+			// Gate 3: Targeted read intersection — at least one cited path must have been
+			// personally read by the Director (full normalized path or basename match).
+			const citedPaths = extractCitedPaths(prompt);
+			const anyCitedRead = citedPaths.some((cited) => readPaths.has(cited) || readPaths.has(basenameOf(cited)));
+			if (!anyCitedRead) {
+				return {
+					block: true,
+					reason:
+						"SLOP_GUARD_BLOCKED: None of the target files cited in the brief were inspected by the Director! " +
+						"You cited target files, but have not read them. Inspect the target files via 'read' before delegating implementation.",
+				};
+			}
+
+			// Gate 4: Master-TODO must be initialized (Phase 3 digest before dispatch)
+			if (!todoInitialized) {
+				return {
+					block: true,
+					reason:
+						"SLOP_GUARD_BLOCKED: Master-TODO checklist has not been initialized! " +
+						"You MUST complete Phase 3 by calling todo(op='init', list=[...]) to digest verified facts before spawning implementation workers.",
+				};
+			}
+
+			// Gate 5: Brief structure check (at least 2 sections from Target/Contract/Change/Acceptance/Non-Goals)
 			const sectionMatches = prompt.match(STRUCTURAL_HEADER_RE);
 			const sectionCount = sectionMatches ? sectionMatches.length : 0;
 			if (sectionCount < 2) {
@@ -97,4 +130,29 @@ export function attachVibeGuard(pi: ExtensionAPI): void {
 			}
 		}
 	});
+}
+
+/**
+ * Normalizes a `read` tool path for intersection checks: strips line selectors
+ * (`:50-100`, `:raw`, …), leading `./`, unifies separators, lowercases.
+ */
+export function normalizeReadPath(rawPath: string): string {
+	let p = rawPath.trim();
+	p = p.replace(/:[\d,\+\-]+$/, "");
+	p = p.replace(/:(raw|img|conflicts)$/i, "");
+	p = p.replace(/\\/g, "/");
+	p = p.replace(/^\.\/+/, "");
+	return p.toLowerCase();
+}
+
+/** Last path segment after separator unification. */
+export function basenameOf(normalizedPath: string): string {
+	const idx = normalizedPath.lastIndexOf("/");
+	return idx === -1 ? normalizedPath : normalizedPath.slice(idx + 1);
+}
+
+/** Extracts and normalizes every candidate file path cited in a brief. */
+export function extractCitedPaths(prompt: string): string[] {
+	const matches = prompt.match(new RegExp(FILE_PATH_RE.source, "gi")) ?? [];
+	return matches.map((m) => normalizeReadPath(m));
 }

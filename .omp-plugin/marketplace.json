@@ -6,14 +6,14 @@
   },
   "metadata": {
     "description": "Vibe Director Anti-Slop Guard for Oh My Pi vibe mode.",
-    "version": "0.1.0"
+    "version": "0.1.1"
   },
   "plugins": [
     {
       "name": "omp-context-kit",
       "source": "./",
       "description": "Enforces the 4-phase recon-audit-digest-dispatch pipeline in OMP Vibe Mode.",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "author": {
         "name": "stgmt"
       },

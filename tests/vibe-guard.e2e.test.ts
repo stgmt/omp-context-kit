@@ -81,12 +81,34 @@ describe("e2e — live ExtensionRunner chain", () => {
 		expect(res?.reason).toStartWith("SLOP_GUARD_BLOCKED");
 	});
 
-	test("after a read, a grounded brief is permitted end-to-end", async () => {
+	test("after a read, a grounded brief without todo init is blocked end-to-end", async () => {
+		await runner.emitToolCall({
+			type: "tool_call",
+			toolName: "read",
+			toolCallId: `e2e-${crypto.randomUUID()}`,
+			input: { path: "src/vibe/classifier.ts" },
+		});
+		const res = await spawn({
+			cli: "good",
+			name: "impl-y",
+			prompt: "## Target Files\nsrc/vibe/classifier.ts\n## Acceptance Criteria\nbun test passes",
+		});
+		expect(res?.block).toBe(true);
+		expect(res?.reason).toContain("Master-TODO");
+	});
+
+	test("after read + todo init, a grounded brief is permitted end-to-end", async () => {
 		await runner.emitToolCall({
 			type: "tool_call",
 			toolName: "read",
 			toolCallId: `e2e-${crypto.randomUUID()}`,
 			input: { path: "src/vibe/gate.ts" },
+		});
+		await runner.emitToolCall({
+			type: "tool_call",
+			toolName: "todo",
+			toolCallId: `e2e-${crypto.randomUUID()}`,
+			input: { op: "init", list: ["recon done", "implement", "verify"] },
 		});
 		const res = await spawn({
 			cli: "good",

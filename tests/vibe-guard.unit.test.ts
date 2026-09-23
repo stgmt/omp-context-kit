@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { isReconScout } from "../src/vibe/classifier.js";
+import { FILE_PATH_RE } from "../src/vibe/gate.js";
 
 describe("isReconScout — Tier 1: name prefixes", () => {
 	test.each(["recon", "scout", "search", "audit", "inspect"])("accepts %s- prefixed worker names", (prefix) => {
@@ -101,5 +102,33 @@ describe("isReconScout — forensic traps", () => {
 	test("empty inputs are not scouts", () => {
 		expect(isReconScout("", "", "")).toBe(false);
 		expect(isReconScout("fast", "", "")).toBe(false);
+	});
+});
+
+describe("FILE_PATH_RE — hardened path matching", () => {
+	test.each(["5.00pm", "v1.0", "section 2.4", "no. 5", "3.14", "2.4"])(
+		"rejects dotted non-path token '%s'",
+		(token) => {
+			expect(FILE_PATH_RE.test(token)).toBe(false);
+		},
+	);
+
+	test.each([
+		"src/vibe/gate.ts",
+		"E:\\repos\\omp-context-kit\\src\\vibe\\gate.ts",
+		"./src/index.ts",
+		"gate.ts",
+		"README.md",
+		"package.json",
+		"dir/sub/file.test.ts",
+		"scripts/install-all-profiles.mjs",
+	])("accepts real path '%s'", (p) => {
+		expect(FILE_PATH_RE.test(p)).toBe(true);
+	});
+
+	test("rejects unknown bare extensions without a separator", () => {
+		expect(FILE_PATH_RE.test("notes.txt")).toBe(false);
+		expect(FILE_PATH_RE.test("archive.zip")).toBe(false);
+		expect(FILE_PATH_RE.test("dir/archive.zip")).toBe(true);
 	});
 });
