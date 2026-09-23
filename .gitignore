@@ -2,3 +2,5 @@ node_modules/
 dist/
 .lean-probe/
 *.log
+audit-reports/commit-reviews/last-run.json
+audit-reports/commit-reviews/runs.jsonl

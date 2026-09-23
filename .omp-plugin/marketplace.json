@@ -1,6 +1,6 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
-  "name": "omp-vibe-kit",
+  "name": "omp-context-kit",
   "owner": {
     "name": "stgmt"
   },
@@ -10,7 +10,7 @@
   },
   "plugins": [
     {
-      "name": "omp-vibe-kit",
+      "name": "omp-context-kit",
       "source": "./",
       "description": "Enforces the 4-phase recon-audit-digest-dispatch pipeline in OMP Vibe Mode.",
       "version": "0.1.0",

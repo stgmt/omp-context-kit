@@ -1,10 +1,11 @@
 {
-  "name": "omp-vibe-kit",
+  "name": "omp-context-kit",
   "version": "0.1.0",
   "description": "Vibe Director Anti-Slop Guard: enforces the recon-audit-digest-dispatch pipeline in OMP Vibe Mode.",
   "license": "MIT",
   "type": "module",
   "private": true,
+  "repository": "https://github.com/stgmt/omp-context-kit.git",
   "keywords": [
     "oh-my-pi",
     "omp",

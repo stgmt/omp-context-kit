@@ -1,8 +1,8 @@
-# OMP Vibe Kit
+# OMP Context Kit
 
-**OMP Vibe Kit is the Anti-Slop Guard for Oh My Pi (OMP) Vibe Mode: it turns the Director from a blind delegator into a verified lead architect.**
+**OMP Context Kit is the Anti-Slop Guard for Oh My Pi (OMP) Vibe Mode: it turns the Director from a blind delegator into a verified lead architect.**
 
-In Vibe Mode, the Director orchestrates workers via `vibe_spawn`. Left unguarded, it delegates on guesses — hallucinated file paths, vague briefs, and scouts that were never verified. OMP Vibe Kit enforces the **Zero-Slop Director Protocol**: a strict 4-phase pipeline that makes blind delegation structurally impossible.
+In Vibe Mode, the Director orchestrates workers via `vibe_spawn`. Left unguarded, it delegates on guesses — hallucinated file paths, vague briefs, and scouts that were never verified. OMP Context Kit enforces the **Zero-Slop Director Protocol**: a strict 4-phase pipeline that makes blind delegation structurally impossible.
 
 - **Prompt rewrite:** replaces the stock `vibe-mode-context` system prompt with the Zero-Slop Execution Pipeline on every LLM call.
 - **Verified-read tracking:** counts the Director's own `read` calls — delegation requires personal inspection, not scout hearsay.
@@ -97,8 +97,8 @@ vibe_spawn { cli: "fast", name: "recon-auth", prompt: "Search the repo for auth 
 ### Marketplace
 
 ```bash
-omp plugin marketplace add https://github.com/stgmt/omp-vibe-kit
-omp plugin install omp-vibe-kit@omp-vibe-kit --scope user
+omp plugin marketplace add https://github.com/stgmt/omp-context-kit
+omp plugin install omp-context-kit@omp-context-kit --scope user
 ```
 
 ### Git pin
@@ -108,7 +108,7 @@ Pin a release in `~/.omp/plugins/package.json`:
 ```json
 {
   "dependencies": {
-    "omp-vibe-kit": "github:stgmt/omp-vibe-kit#v0.1.0"
+    "omp-context-kit": "github:stgmt/omp-context-kit#v0.1.0"
   }
 }
 ```
