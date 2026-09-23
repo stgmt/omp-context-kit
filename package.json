@@ -1,0 +1,35 @@
+{
+  "name": "omp-vibe-kit",
+  "version": "0.1.0",
+  "description": "Vibe Director Anti-Slop Guard: enforces the recon-audit-digest-dispatch pipeline in OMP Vibe Mode.",
+  "license": "MIT",
+  "type": "module",
+  "private": true,
+  "keywords": [
+    "oh-my-pi",
+    "omp",
+    "vibe-mode",
+    "anti-slop",
+    "guardrails"
+  ],
+  "engines": {
+    "omp": ">=17.3.7"
+  },
+  "omp": {
+    "extensions": [
+      "./dist/extension.js"
+    ]
+  },
+  "scripts": {
+    "build": "bun build src/index.ts --outfile dist/extension.js --target bun --format esm --minify",
+    "test": "bun test tests/*.test.ts",
+    "test:unit": "bun test tests/vibe-guard.unit.test.ts",
+    "test:regression": "bun test tests/vibe-guard.regression.test.ts",
+    "test:edge": "bun test tests/vibe-guard.edge.test.ts",
+    "test:mutation": "bun test tests/vibe-guard.mutation.test.ts",
+    "test:e2e": "bun test tests/vibe-guard.e2e.test.ts",
+    "test:all": "bun run build && bun test tests/*.test.ts",
+    "install-global": "node scripts/install-all-profiles.mjs",
+    "uninstall-global": "node scripts/uninstall-all-profiles.mjs"
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "omp-vibe-kit",
+  "owner": {
+    "name": "stgmt"
+  },
+  "metadata": {
+    "description": "Vibe Director Anti-Slop Guard for Oh My Pi vibe mode.",
+    "version": "0.1.0"
+  },
+  "plugins": [
+    {
+      "name": "omp-vibe-kit",
+      "source": "./",
+      "description": "Enforces the 4-phase recon-audit-digest-dispatch pipeline in OMP Vibe Mode.",
+      "version": "0.1.0",
+      "author": {
+        "name": "stgmt"
+      },
+      "license": "MIT",
+      "category": "development"
+    }
+  ]
+}
