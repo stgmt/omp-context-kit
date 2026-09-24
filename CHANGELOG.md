@@ -3,6 +3,13 @@
 All notable changes to omp-context-kit are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.2.1] - 2026-09-24
+
+### Changed
+
+- The live ExtensionRunner test resolves the installed OMP SDK through the platform home directory when `OMP_RUNTIME_ROOT` is unset.
+- The release workflow runs the four runner-independent suites on clean hosted runners; `test:all` remains the full local suite including the real OMP loader E2E.
+
 ## [0.2.0] - 2026-09-23
 
 ### Added

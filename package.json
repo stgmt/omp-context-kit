@@ -1,6 +1,6 @@
 {
   "name": "omp-context-kit",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Vibe Director Anti-Slop Guard: enforces verified orchestration and complete six-section worker briefs in OMP Vibe Mode.",
   "license": "MIT",
   "type": "module",
@@ -30,6 +30,7 @@
     "test:mutation": "bun test tests/vibe-guard.mutation.test.ts",
     "test:e2e": "bun test tests/vibe-guard.e2e.test.ts",
     "test:all": "bun run build && bun test tests/*.test.ts",
+    "test:release": "bun run build && bun test tests/vibe-guard.unit.test.ts tests/vibe-guard.regression.test.ts tests/vibe-guard.edge.test.ts tests/vibe-guard.mutation.test.ts",
     "install-global": "node scripts/install-all-profiles.mjs",
     "uninstall-global": "node scripts/uninstall-all-profiles.mjs"
   }

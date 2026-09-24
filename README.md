@@ -127,7 +127,7 @@ Pin a release in `~/.omp/plugins/package.json`:
 ```json
 {
   "dependencies": {
-    "omp-context-kit": "github:stgmt/omp-context-kit#v0.2.0"
+    "omp-context-kit": "github:stgmt/omp-context-kit#v0.2.1"
   }
 }
 ```
@@ -153,10 +153,11 @@ bun run test:regression # non-vibe pass-through proofs
 bun run test:edge      # edge cases (Windows paths, negative constraints, …)
 bun run test:mutation  # proves every gate check is load-bearing
 bun run test:e2e       # live ExtensionRunner chain via installed pi-coding-agent
-bun run test:all       # build + full pyramid
+bun run test:all       # build + full pyramid, including live OMP E2E
+bun run test:release   # build + runner-independent release suites
 ```
 
-The e2e suite loads `dist/extension.js` through the real OMP extension loader and drives it through a real `ExtensionRunner` — the same dispatch path the agent loop uses. It resolves the runtime from `OMP_RUNTIME_ROOT` or `~/.omp/plugins/node_modules/@oh-my-pi/pi-coding-agent`.
+The e2e suite loads `dist/extension.js` through the real OMP extension loader and drives it through a real `ExtensionRunner` — the same dispatch path the agent loop uses. It resolves the runtime from `OMP_RUNTIME_ROOT` or the current user home directory. `test:all` includes this live E2E; the GitHub release workflow uses `test:release`, which runs the non-runtime suites on clean hosted runners.
 
 ## Compatibility
 

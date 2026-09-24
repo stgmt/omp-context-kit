@@ -46,8 +46,8 @@ jobs:
         with:
           bun-version: "1.4.2"
 
-      - name: Run full tests and rebuild bundle
-        run: bun run test:all
+      - name: Run portable release tests and rebuild bundle
+        run: bun run test:release
 
       - name: Require committed bundle to match build
         run: git diff --exit-code -- dist/extension.js

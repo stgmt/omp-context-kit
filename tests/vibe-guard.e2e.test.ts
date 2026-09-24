@@ -1,6 +1,6 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -13,7 +13,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const repoRoot = resolve(fileURLToPath(new URL("..", import.meta.url)).replace(/\/$/, ""));
 const runtimeRoot = resolve(
-	process.env.OMP_RUNTIME_ROOT ?? join(process.env.USERPROFILE ?? "~", ".omp/plugins/node_modules/@oh-my-pi/pi-coding-agent"),
+	process.env.OMP_RUNTIME_ROOT ?? join(homedir(), ".omp/plugins/node_modules/@oh-my-pi/pi-coding-agent"),
 );
 const runtimeModule = (relativePath: string) => import(pathToFileURL(join(runtimeRoot, relativePath)).href);
 
