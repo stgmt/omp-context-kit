@@ -3,6 +3,18 @@
 All notable changes to omp-context-kit are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.2.0] - 2026-09-23
+
+### Added
+
+- Mandatory six-section worker-brief contract for every `vibe_spawn`, including reconnaissance scouts.
+
+### Changed
+
+- The existing spawn gate now blocks missing, duplicate, empty, or placeholder-bearing sections and enumerates the required fixes; it never fills brief fields automatically.
+- `Checkpoint` requires a positive elapsed duration after spawn. `Dependencies` accepts `None` only when no prerequisite exists.
+- The Director prompt requires the same complete contract for scout and implementation workers.
+
 ## [0.1.1] - 2026-09-23
 
 ### Fixed

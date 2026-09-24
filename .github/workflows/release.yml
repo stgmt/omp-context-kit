@@ -1,0 +1,153 @@
+name: OMP plugin release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build:
+    name: Test and package tagged source
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      archive: ${{ steps.candidate.outputs.archive }}
+      evidence: ${{ steps.candidate.outputs.evidence }}
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Validate tag and marketplace metadata
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Refusing non-semver release tag: $RELEASE_TAG" >&2
+            exit 1
+          fi
+          version="${RELEASE_TAG#v}"
+          test "$(jq -r '.version' package.json)" = "$version"
+          jq -e --arg version "$version" '
+            .metadata.version == $version and
+            (.plugins | length > 0) and
+            all(.plugins[]; .version == $version)
+          ' .omp-plugin/marketplace.json >/dev/null
+          tag_commit="$(git rev-parse "${RELEASE_TAG}^{commit}")"
+          head_commit="$(git rev-parse HEAD)"
+          test "$tag_commit" = "$head_commit"
+          test -s dist/extension.js
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.2"
+
+      - name: Run full tests and rebuild bundle
+        run: bun run test:all
+
+      - name: Require committed bundle to match build
+        run: git diff --exit-code -- dist/extension.js
+
+      - name: Create candidate archive and evidence
+        id: candidate
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          archive="omp-context-kit-$RELEASE_TAG.tar.gz"
+          git archive --format=tar.gz --prefix="omp-context-kit-$RELEASE_TAG/" --output="$archive" "$RELEASE_TAG"
+          commit="$(git rev-parse "${RELEASE_TAG}^{commit}")"
+          tree="$(git rev-parse "${RELEASE_TAG}^{tree}")"
+          digest="$(sha256sum "$archive" | awk '{print $1}')"
+          evidence="omp-context-kit-$RELEASE_TAG.release-evidence.json"
+          jq -n --arg tag "$RELEASE_TAG" --arg commit "$commit" --arg tree "$tree" --arg archive "$archive" --arg digest "$digest" '{tag:$tag, commit:$commit, packageTree:$tree, archive:$archive, archiveSha256:$digest}' > "$evidence"
+          printf 'archive=%s\n' "$archive" >> "$GITHUB_OUTPUT"
+          printf 'evidence=%s\n' "$evidence" >> "$GITHUB_OUTPUT"
+
+      - name: Upload exact candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-candidate
+          path: |
+            ${{ steps.candidate.outputs.archive }}
+            ${{ steps.candidate.outputs.evidence }}
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Attest and publish verified candidate
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      attestations: write
+      contents: write
+      id-token: write
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Download exact candidate
+        uses: actions/download-artifact@v4
+        with:
+          name: release-candidate
+          path: candidate
+
+      - name: Verify tag, metadata, and transferred bytes
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          ARCHIVE_NAME: ${{ needs.build.outputs.archive }}
+          EVIDENCE_NAME: ${{ needs.build.outputs.evidence }}
+        run: |
+          version="${RELEASE_TAG#v}"
+          test "$(jq -r '.version' package.json)" = "$version"
+          jq -e --arg version "$version" '
+            .metadata.version == $version and
+            (.plugins | length > 0) and
+            all(.plugins[]; .version == $version)
+          ' .omp-plugin/marketplace.json >/dev/null
+          tag_commit="$(git rev-parse "${RELEASE_TAG}^{commit}")"
+          head_commit="$(git rev-parse HEAD)"
+          tree="$(git rev-parse "${RELEASE_TAG}^{tree}")"
+          test "$tag_commit" = "$head_commit"
+          archive="candidate/$ARCHIVE_NAME"
+          evidence="candidate/$EVIDENCE_NAME"
+          test -s "$archive"
+          test "$(jq -r '.tag' "$evidence")" = "$RELEASE_TAG"
+          test "$(jq -r '.commit' "$evidence")" = "$tag_commit"
+          test "$(jq -r '.packageTree' "$evidence")" = "$tree"
+          test "$(jq -r '.archive' "$evidence")" = "$ARCHIVE_NAME"
+          expected_digest="$(jq -r '.archiveSha256' "$evidence")"
+          actual_digest="$(sha256sum "$archive" | awk '{print $1}')"
+          test "$actual_digest" = "$expected_digest"
+          printf 'ARCHIVE=%s\nEVIDENCE=%s\n' "$archive" "$evidence" >> "$GITHUB_ENV"
+
+      - name: Extract versioned changelog notes
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          version="${RELEASE_TAG#v}"
+          awk -v heading="## [$version]" '
+            index($0, heading) == 1 { found=1; next }
+            found && /^## \[/{ exit }
+            found { print }
+          ' CHANGELOG.md > "$RUNNER_TEMP/release-notes.md"
+          test -s "$RUNNER_TEMP/release-notes.md"
+          printf 'RELEASE_NOTES=%s\n' "$RUNNER_TEMP/release-notes.md" >> "$GITHUB_ENV"
+
+      - name: Attest candidate archive
+        uses: actions/attest@v4
+        with:
+          subject-path: ${{ github.workspace }}/candidate/${{ needs.build.outputs.archive }}
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          gh release create "$RELEASE_TAG" "$ARCHIVE" "$EVIDENCE" --verify-tag --title "$RELEASE_TAG" --notes-file "$RELEASE_NOTES"

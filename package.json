@@ -1,7 +1,7 @@
 {
   "name": "omp-context-kit",
-  "version": "0.1.1",
-  "description": "Vibe Director Anti-Slop Guard: enforces the recon-audit-digest-dispatch pipeline in OMP Vibe Mode.",
+  "version": "0.2.0",
+  "description": "Vibe Director Anti-Slop Guard: enforces verified orchestration and complete six-section worker briefs in OMP Vibe Mode.",
   "license": "MIT",
   "type": "module",
   "private": true,

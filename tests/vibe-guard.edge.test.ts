@@ -23,6 +23,238 @@ async function initTodo(toolCall: ToolCallHandler) {
 	await toolCall({ toolName: "todo", input: { op: "init", list: ["recon done", "implement", "verify"] } });
 }
 
+
+const WORKER_CONTRACT_SECTIONS = [
+	["Goal", "Implement the requested focused behavior."],
+	["Done when", "The expected behavior is observable and verified."],
+	["Scope / Non-goals", "In scope: src/index.ts. Non-goals: unrelated files."],
+	["Evidence", "Return the behavior checked and its result."],
+	["Checkpoint", "15m after spawn."],
+	["Dependencies", "None"],
+] as const;
+
+type WorkerContractHeading = (typeof WORKER_CONTRACT_SECTIONS)[number][0];
+
+function workerBrief(omit?: WorkerContractHeading, overrides: Partial<Record<WorkerContractHeading, string>> = {}): string {
+	return WORKER_CONTRACT_SECTIONS.filter(([heading]) => heading !== omit)
+		.map(([heading, body]) => "## " + heading + "\n" + (overrides[heading] ?? body))
+		.join("\n\n");
+}
+
+function workerBriefWithScope(scope: string, goal = "Implement the requested focused behavior."): string {
+	return workerBrief(undefined, { Goal: goal, "Scope / Non-goals": scope });
+}
+
+describe("BDD: worker spawn contract", () => {
+	test("Given all six sections, when an implementation worker starts, then the gate allows it", async () => {
+		const { toolCall } = attach();
+		await readOnce(toolCall);
+		await initTodo(toolCall);
+		const res = await toolCall({
+			toolName: "vibe_spawn",
+			input: { cli: "good", name: "impl-contract", prompt: workerBrief() },
+		});
+		expect(res).toBeUndefined();
+	});
+
+	test.each(WORKER_CONTRACT_SECTIONS.map(([heading]) => heading))(
+		"Given the '%s' section is missing, when a worker starts, then the gate names the missing section",
+		async (heading) => {
+			const { toolCall } = attach();
+			await readOnce(toolCall);
+			await initTodo(toolCall);
+			const res = await toolCall({
+				toolName: "vibe_spawn",
+				input: { cli: "good", name: "impl-contract", prompt: workerBrief(heading) },
+			});
+			expect(res?.block).toBe(true);
+			expect(res?.reason).toContain(heading);
+		},
+	);
+
+	test.each(WORKER_CONTRACT_SECTIONS.map(([heading]) => [heading, ""] as const))(
+		"Given the '%s' section is empty, when a worker starts, then the gate rejects it",
+		async (heading, value) => {
+			const { toolCall } = attach();
+			await readOnce(toolCall);
+			await initTodo(toolCall);
+			const res = await toolCall({
+				toolName: "vibe_spawn",
+				input: { cli: "good", name: "impl-contract", prompt: workerBrief(undefined, { [heading]: value }) },
+			});
+			expect(res?.block).toBe(true);
+			expect(res?.reason).toContain(heading);
+		},
+	);
+
+	test.each([
+		["Goal", "TBD"],
+		["Done when", "TODO: fill in"],
+		["Scope / Non-goals", "[placeholder]"],
+		["Evidence", "TBD"],
+		["Evidence", "Evidence remains TBD until the check runs."],
+		["Checkpoint", "later"],
+		["Checkpoint", "0m after spawn"],
+		["Checkpoint", "-0.5h after spawn"],
+		["Dependencies", "TODO: fill in"],
+	] as const)(
+		"Given '%s' contains a placeholder or invalid checkpoint, when a worker starts, then the gate rejects it",
+		async (heading, value) => {
+			const { toolCall } = attach();
+			await readOnce(toolCall);
+			await initTodo(toolCall);
+			const res = await toolCall({
+				toolName: "vibe_spawn",
+				input: { cli: "good", name: "impl-contract", prompt: workerBrief(undefined, { [heading]: value }) },
+			});
+			expect(res?.block).toBe(true);
+			expect(res?.reason).toContain(heading);
+		},
+	);
+
+	test.each([
+		["compound hours and minutes", "1h30m after spawn"],
+		["one day", "1 day after spawn"],
+		["two days", "2 days after spawn"],
+		["abbreviated hours", "3 hrs after spawn"],
+		["fractional hours", "0.5h after spawn"],
+		["half an hour", "half an hour after spawn"],
+	] as const)("positive elapsed checkpoint (%s) is accepted", async (_label, checkpoint) => {
+		const { toolCall } = attach();
+		const res = await toolCall({
+			toolName: "vibe_spawn",
+			input: { cli: "fast", name: "recon-valid-duration", prompt: workerBrief(undefined, { Checkpoint: checkpoint }) },
+		});
+		expect(res).toBeUndefined();
+	});
+	test("Given a recon scout without the contract, when it starts, then the gate still blocks it", async () => {
+		const { toolCall } = attach();
+		const res = await toolCall({
+			toolName: "vibe_spawn",
+			input: { cli: "fast", name: "recon-contract", prompt: workerBrief("Evidence") },
+		});
+		expect(res?.block).toBe(true);
+		expect(res?.reason).toContain("Evidence");
+	});
+
+	test("valid TypeScript generics and markup are not placeholders", async () => {
+		const { toolCall } = attach();
+		const res = await toolCall({
+			toolName: "vibe_spawn",
+			input: {
+				cli: "fast",
+				name: "recon-type-syntax",
+				prompt: workerBrief(undefined, { Evidence: "Return Promise<Session> from validate() and preserve <div> markup." }),
+			},
+		});
+		expect(res).toBeUndefined();
+	});
+
+	test("brief rejection names the placeholder marker", async () => {
+		const { toolCall } = attach();
+		const res = await toolCall({
+			toolName: "vibe_spawn",
+			input: { cli: "fast", name: "recon-placeholder-token", prompt: workerBrief(undefined, { Evidence: "TBD" }) },
+		});
+		expect(res?.block).toBe(true);
+		expect(res?.reason).toContain("Evidence");
+		expect(res?.reason).toContain("TBD");
+	});
+
+	test("mixed None and real prerequisites are rejected", async () => {
+		const { toolCall } = attach();
+		const res = await toolCall({
+			toolName: "vibe_spawn",
+			input: { cli: "fast", name: "recon-dependencies", prompt: workerBrief(undefined, { Dependencies: "None\nworker-a must finish first" }) },
+		});
+		expect(res?.block).toBe(true);
+		expect(res?.reason).toContain("Dependencies");
+	});
+	test("same-line mixed None and real prerequisites are rejected", async () => {
+		const { toolCall } = attach();
+		const res = await toolCall({
+			toolName: "vibe_spawn",
+			input: { cli: "fast", name: "recon-dependencies-same-line", prompt: workerBrief(undefined, { Dependencies: "None; worker-a must finish first" }) },
+		});
+		expect(res?.block).toBe(true);
+		expect(res?.reason).toContain("Dependencies");
+		expect(res?.reason).toContain("sole content");
+	});
+
+	test("Master-TODO and todoist references are not placeholders", async () => {
+		const { toolCall } = attach();
+		const res = await toolCall({
+			toolName: "vibe_spawn",
+			input: { cli: "fast", name: "recon-todo-vocabulary", prompt: workerBrief(undefined, { Evidence: "Update the Master-TODO.\nKeep [todoist] integration." }) },
+		});
+		expect(res).toBeUndefined();
+	});
+
+	test("None remains a placeholder outside Dependencies", async () => {
+		const { toolCall } = attach();
+		const res = await toolCall({
+			toolName: "vibe_spawn",
+			input: { cli: "fast", name: "recon-goal", prompt: workerBrief(undefined, { Goal: "None" }) },
+		});
+		expect(res?.block).toBe(true);
+		expect(res?.reason).toContain("Goal");
+	});
+
+	test("duplicate contract headings are rejected by name", async () => {
+		const { toolCall } = attach();
+		const prompt = workerBrief() + "\n\n## Goal\nA second outcome.";
+		const res = await toolCall({
+			toolName: "vibe_spawn",
+			input: { cli: "fast", name: "recon-duplicate-goal", prompt },
+		});
+		expect(res?.block).toBe(true);
+		expect(res?.reason).toContain("Duplicate ## Goal");
+	});
+
+	test("headings inside fenced examples do not count as sections", async () => {
+		const { toolCall } = attach();
+		const fence = String.fromCharCode(96).repeat(3);
+		const prompt = workerBrief().replace(
+			"## Goal\n",
+			"## Goal\nDescribe the intended outcome.\n\n" + fence + "md\n## Goal\nQuoted example heading.\n" + fence + "\n",
+		);
+		const res = await toolCall({ toolName: "vibe_spawn", input: { cli: "fast", name: "recon-fenced-heading", prompt } });
+		expect(res).toBeUndefined();
+	});
+
+	test("two-space-indented contract headings remain valid", async () => {
+		const { toolCall } = attach();
+		const prompt = workerBrief().replace(/^## /gm, "  ## ");
+		const res = await toolCall({ toolName: "vibe_spawn", input: { cli: "fast", name: "recon-indented-headings", prompt } });
+		expect(res).toBeUndefined();
+	});
+
+	test("unrecognized headings do not hide placeholder content", async () => {
+		const { toolCall } = attach();
+		const prompt = workerBrief().replace(
+			"## Evidence\nReturn the behavior checked and its result.",
+			"## Evidence\nReturn the behavior checked and its result.\n## Additional context\nTODO: fill in",
+		);
+		const res = await toolCall({ toolName: "vibe_spawn", input: { cli: "fast", name: "recon-unrecognized-heading", prompt } });
+		expect(res?.block).toBe(true);
+		expect(res?.reason).toContain("Evidence");
+		expect(res?.reason).toContain("TODO");
+	});
+
+	test("case and repeated whitespace in headings preserve the contract", async () => {
+		const { toolCall } = attach();
+		const prompt = workerBrief()
+			.replace(/^## Goal$/m, "## goal")
+			.replace(/^## Done when$/m, "##  DONE   WHEN")
+			.replace(/^## Scope \/ Non-goals$/m, "## Scope /  Non-goals");
+		const res = await toolCall({
+			toolName: "vibe_spawn",
+			input: { cli: "fast", name: "recon-normalized-headings", prompt },
+		});
+		expect(res).toBeUndefined();
+	});
+});
+
 describe("edge cases", () => {
 	// 1
 	test("empty vibe_spawn input blocks without crashing", async () => {
@@ -50,7 +282,7 @@ describe("edge cases", () => {
 			input: { cli: 42, name: null, prompt: ["not", "a", "string"] },
 		});
 		expect(res?.block).toBe(true);
-		expect(res?.reason).toContain("file paths");
+		expect(res?.reason).toContain("Missing ## Goal");
 	});
 
 	// 4
@@ -63,7 +295,7 @@ describe("edge cases", () => {
 			input: {
 				cli: "good",
 				name: "impl-x",
-				prompt: "## Target Files\nE:\\repos\\omp-context-kit\\src\\vibe\\gate.ts\n## Acceptance Criteria\nbuild passes",
+				prompt: workerBriefWithScope("E:\\repos\\omp-context-kit\\src\\vibe\\gate.ts"),
 			},
 		});
 		expect(res).toBeUndefined();
@@ -77,7 +309,7 @@ describe("edge cases", () => {
 			input: {
 				cli: "fast",
 				name: "scout-x",
-				prompt: "Search the repo. Do NOT build, do NOT edit, no fixes, do not patch anything.",
+				prompt: workerBriefWithScope("Read-only repo search. Do NOT build, do NOT edit, no fixes, do not patch anything."),
 			},
 		});
 		expect(res).toBeUndefined();
@@ -91,7 +323,7 @@ describe("edge cases", () => {
 			input: {
 				cli: "fast",
 				name: "recon-x",
-				prompt: "inspect worktree E:/tmp/wt-refusal-v4 at ref feat/prompt-refusal-rewrite and .specs/",
+				prompt: workerBriefWithScope("Read-only discovery of E:/tmp/wt-refusal-v4 at ref feat/prompt-refusal-rewrite; no edits."),
 			},
 		});
 		expect(res).toBeUndefined();
@@ -103,14 +335,14 @@ describe("edge cases", () => {
 		await readOnce(toolCall);
 		const res = await toolCall({
 			toolName: "vibe_spawn",
-			input: { cli: "good", name: "impl-x", prompt: "## Target Files\n## Acceptance Criteria\nmake it work" },
+			input: { cli: "good", name: "impl-x", prompt: workerBriefWithScope("No repository file target; focus only on task behavior.") },
 		});
 		expect(res?.block).toBe(true);
 		expect(res?.reason).toContain("file paths");
 	});
 
 	// 8
-	test("single-section brief is blocked with the structure reason", async () => {
+	test("legacy brief reports all six missing contract sections", async () => {
 		const { toolCall } = attach();
 		await readOnce(toolCall);
 		await initTodo(toolCall);
@@ -119,7 +351,7 @@ describe("edge cases", () => {
 			input: { cli: "good", name: "impl-x", prompt: "## Target Files\nsrc/index.ts — change it" },
 		});
 		expect(res?.block).toBe(true);
-		expect(res?.reason).toContain("structured specification");
+		for (const [heading] of WORKER_CONTRACT_SECTIONS) expect(res?.reason).toContain("Missing ## " + heading);
 	});
 
 	// 9
@@ -127,7 +359,7 @@ describe("edge cases", () => {
 		const { toolCall } = attach();
 		const res = await toolCall({
 			toolName: "vibe_spawn",
-			input: { cli: "fast", name: "worker-1", prompt: `${"x".repeat(310)} explore the repo` },
+			input: { cli: "fast", name: "worker-1", prompt: workerBriefWithScope("In scope: src/index.ts.", "x".repeat(310) + " explore the repo") },
 		});
 		expect(res?.block).toBe(true);
 	});
@@ -153,7 +385,7 @@ describe("edge cases — hardened path regex", () => {
 				input: {
 					cli: "good",
 					name: "impl-x",
-					prompt: `## Target Files\n${token}\n## Acceptance Criteria\nmake it work`,
+					prompt: workerBriefWithScope(token),
 				},
 			});
 			expect(res?.block).toBe(true);
@@ -173,7 +405,7 @@ describe("edge cases — hardened path regex", () => {
 				input: {
 					cli: "good",
 					name: "impl-x",
-					prompt: `## Target Files\n${file}\n## Acceptance Criteria\nmake it work`,
+					prompt: workerBriefWithScope(file),
 				},
 			});
 			expect(res).toBeUndefined();
@@ -192,7 +424,7 @@ describe("edge cases — targeted read intersection", () => {
 			input: {
 				cli: "good",
 				name: "impl-billing",
-				prompt: "## Target Files\nsrc/billing.ts\n## Acceptance Criteria\nbun test passes",
+				prompt: workerBriefWithScope("In scope: src/billing.ts."),
 			},
 		});
 		expect(res?.block).toBe(true);
@@ -209,7 +441,7 @@ describe("edge cases — targeted read intersection", () => {
 			input: {
 				cli: "good",
 				name: "impl-x",
-				prompt: "## Target Files\nE:/repos/omp-context-kit/src/vibe/gate.ts\n## Acceptance Criteria\nok",
+				prompt: workerBriefWithScope("In scope: E:/repos/omp-context-kit/src/vibe/gate.ts."),
 			},
 		});
 		expect(res).toBeUndefined();
@@ -225,7 +457,7 @@ describe("edge cases — targeted read intersection", () => {
 			input: {
 				cli: "good",
 				name: "impl-x",
-				prompt: "## Target Files\nsrc/vibe/gate.ts\nsrc/vibe/classifier.ts\n## Acceptance Criteria\nok",
+				prompt: workerBriefWithScope("In scope:\nsrc/vibe/gate.ts\nsrc/vibe/classifier.ts\nNon-goals: unrelated changes."),
 			},
 		});
 		expect(res).toBeUndefined();
@@ -241,7 +473,7 @@ describe("edge cases — targeted read intersection", () => {
 			input: {
 				cli: "good",
 				name: "impl-x",
-				prompt: "## Target Files\nsrc/vibe/gate.ts\n## Acceptance Criteria\nok",
+				prompt: workerBriefWithScope("In scope: src/vibe/gate.ts."),
 			},
 		});
 		expect(res).toBeUndefined();
@@ -257,7 +489,7 @@ describe("edge cases — targeted read intersection", () => {
 			input: {
 				cli: "good",
 				name: "impl-x",
-				prompt: "## Target Files\nsrc/vibe/gate.ts\n## Acceptance Criteria\nok",
+				prompt: workerBriefWithScope("In scope: src/vibe/gate.ts."),
 			},
 		});
 		expect(res).toBeUndefined();
@@ -274,7 +506,7 @@ describe("edge cases — master-TODO gate", () => {
 			input: {
 				cli: "good",
 				name: "impl-x",
-				prompt: "## Target Files\nsrc/vibe/gate.ts\n## Acceptance Criteria\nok",
+				prompt: workerBriefWithScope("In scope: src/vibe/gate.ts."),
 			},
 		});
 		expect(res?.block).toBe(true);
@@ -291,7 +523,7 @@ describe("edge cases — master-TODO gate", () => {
 			input: {
 				cli: "good",
 				name: "impl-x",
-				prompt: "## Target Files\nsrc/vibe/gate.ts\n## Acceptance Criteria\nok",
+				prompt: workerBriefWithScope("In scope: src/vibe/gate.ts."),
 			},
 		});
 		expect(res?.block).toBe(true);
@@ -308,7 +540,7 @@ describe("edge cases — master-TODO gate", () => {
 			input: {
 				cli: "good",
 				name: "impl-x",
-				prompt: "## Target Files\nsrc/vibe/gate.ts\n## Acceptance Criteria\nok",
+				prompt: workerBriefWithScope("In scope: src/vibe/gate.ts."),
 			},
 		});
 		expect(res).toBeUndefined();

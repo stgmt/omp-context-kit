@@ -2,12 +2,12 @@
 
 **OMP Context Kit is the Anti-Slop Guard for Oh My Pi (OMP) Vibe Mode: it turns the Director from a blind delegator into a verified lead architect.**
 
-In Vibe Mode, the Director orchestrates workers via `vibe_spawn`. Left unguarded, it delegates on guesses — hallucinated file paths, vague briefs, and scouts that were never verified. OMP Context Kit enforces the **Zero-Slop Director Protocol**: a strict 4-phase pipeline that makes blind delegation structurally impossible.
+In Vibe Mode, the Director orchestrates workers via `vibe_spawn`. Left unguarded, it delegates on guesses — hallucinated file paths, vague briefs, and scouts that were never verified. OMP Context Kit enforces the **Zero-Slop Director Protocol**: a strict five-phase pipeline that makes blind delegation structurally impossible.
 
 - **Prompt rewrite:** replaces the stock `vibe-mode-context` system prompt with the Zero-Slop Execution Pipeline on every LLM call.
 - **Verified-read tracking:** records the normalized paths of the Director's own `read` calls — delegation requires personal inspection, not scout hearsay.
-- **Recon passthrough:** reconnaissance scouts (`recon-*`, `scout-*`, `RECON:` prompts, fast-tier keyword workers) dispatch immediately, with no brief bureaucracy.
-- **Preflight gating:** implementation workers are blocked with actionable `SLOP_GUARD_BLOCKED` reasons until the brief cites files the Director actually read, the Master-TODO exists, and the brief carries structured sections.
+- **Recon passthrough:** reconnaissance scouts (`recon-*`, `scout-*`, `RECON:` prompts, fast-tier keyword workers) bypass implementation-only read, target-path, and Master-TODO gates, but must pass the complete six-section brief contract.
+- **Preflight gating:** every spawn is blocked with actionable `SLOP_GUARD_BLOCKED` reasons for an incomplete six-section brief; implementation workers must also cite a file the Director read and wait for the Master-TODO.
 - **Zero dependencies:** the shipped `dist/extension.js` is a single self-contained bundle — no runtime packages, no subprocesses, purely in-process EventBus hooks.
 
 ## The Zero-Slop Director Protocol
@@ -15,12 +15,13 @@ In Vibe Mode, the Director orchestrates workers via `vibe_spawn`. Left unguarded
 ```mermaid
 stateDiagram-v2
     [*] --> IDLE: session start
-    IDLE --> RECON: vibe_spawn scout (unblocked)
+    IDLE --> RECON: vibe_spawn scout (brief contract passed)
+    IDLE --> IDLE: vibe_spawn blocked (invalid brief)
     RECON --> AUDITED: Director reads files personally
     AUDITED --> DIGESTED: todo(op="init") registered
     DIGESTED --> DISPATCHED: worker spawn with strict brief
     IDLE --> IDLE: vibe_spawn worker blocked (0 reads)
-    AUDITED --> AUDITED: brief blocked (no paths / cited files unread / no todo / <2 sections)
+    AUDITED --> AUDITED: implementation worker blocked (no paths / unread target / no todo)
 ```
 
 | Phase | Gate | What the Director must do |
@@ -28,7 +29,7 @@ stateDiagram-v2
 | 1. Reconnaissance | — | Spawn a `fast` scout (`recon-<topic>`) to map files, signatures, and data flow. |
 | 2. Adversarial Audit | `readPaths` non-empty | Personally `read` the files the scout reported. Scouts hallucinate; bytes do not. |
 | 3. Master-TODO Synthesis | `todo(op="init")` or `op="start"` | Digest verified facts into the parent checklist before dispatching. |
-| 4. Grounded Dispatch | cited path ∈ `readPaths` + ≥2 brief sections | Spawn workers only with the Strict Brief Contract below. |
+| 4. Grounded Dispatch | complete six-section brief; implementations also require cited path ∈ `readPaths` + Master-TODO | Spawn workers only with the Strict Brief Contract below. |
 | 5. Result Verification | — | Re-`read` touched files; never trust a worker's verbal claim. |
 
 ## How it works
@@ -50,63 +51,65 @@ Negative constraints (`"do NOT build"`) and branch names (`feat/prompt-refusal-r
 
 ### Worker gates
 
-A non-scout `vibe_spawn` must pass five gates, in order:
+Every `vibe_spawn` must pass the complete-brief contract first. Non-scouts then pass four implementation gates in order:
 
 1. **Verified read** — the Director has read at least one file this session.
-2. **Concrete file paths** — the prompt matches a filesystem path: either a path with a separator (`/` or `\`, incl. Windows `C:\…`) or a bare filename with a recognized code/doc extension (`ts`, `py`, `md`, `json`, …). Dotted non-paths like `5.00pm`, `v1.0`, `section 2.4` are rejected.
+2. **Concrete file paths** — the prompt matches a filesystem path: either a path with a separator (`/` or \), incl. Windows `C:\…`) or a bare filename with a recognized code/doc extension (`ts`, `py`, `md`, `json`, …). Dotted non-paths like `5.00pm`, `v1.0`, `section 2.4` are rejected.
 3. **Targeted read intersection** — at least one cited path (or its basename) was personally `read` by the Director. Reading `src/auth.ts` does not authorize a brief that only cites `src/billing.ts`.
 4. **Master-TODO initialized** — `todo(op="init")` or `todo(op="start")` has run.
-5. **Structured brief** — at least two section headers from `## Target Files`, `## Current Contract`, `## Required Delta`, `## Acceptance Criteria`, `## Anti-Slop Non-Goals`, `## Verification`.
 
-Every rejection returns an actionable `SLOP_GUARD_BLOCKED` reason naming the failed gate and the fix — including a hint to rename the worker `recon-<topic>` if it was meant as a scout.
+Brief-contract rejections name every missing or invalid section; implementation-gate rejections name the failed check and its fix. The read-gate message includes a scout hint when relevant.
 
 ## Strict Brief Contract
 
-**Blocked** — no verified reads:
+Every vibe_spawn prompt, including reconnaissance scouts, must contain all six required level-two headings: Goal, Done when, Scope / Non-goals, Evidence, Checkpoint, and Dependencies. Each section must be non-empty and concrete; duplicate headings, blank bodies, and placeholder text block the spawn. Checkpoint needs a positive elapsed duration after spawn. Dependencies may contain only None when there are no prerequisites. For implementation workers, put concrete targets under Scope / Non-goals; at least one cited path must have been read by the Director.
+
+The gate reports every missing or invalid section and never fills it in. Scouts bypass implementation-specific read, target-path, and Master-TODO gates, not the brief contract.
+
+**Blocked** — incomplete brief (the gate enumerates every missing heading):
 
 ```text
-vibe_spawn { cli: "good", name: "impl-x", prompt: "refactor the auth module" }
-→ SLOP_GUARD_BLOCKED: Director has not read or verified any repository files!
+## Goal
+Fix session expiration handling.
+## Scope / Non-goals
+src/auth/session.ts
 ```
 
-**Blocked** — cited files never read (Director read `src/auth.ts`, brief cites `src/billing.ts`):
+**Allowed** — complete implementation brief, after the Director has read src/auth/session.ts and initialized the Master-TODO:
 
 ```text
-vibe_spawn { cli: "good", name: "impl-x", prompt: "## Target Files\nsrc/billing.ts\n## Acceptance Criteria\nok" }
-→ SLOP_GUARD_BLOCKED: None of the target files cited in the brief were inspected by the Director!
+## Goal
+Reject expired sessions without changing valid-session behavior.
+## Done when
+Expired sessions are rejected, valid sessions remain accepted, and the focused tests pass.
+## Scope / Non-goals
+In scope: src/auth/session.ts and tests/auth/session.test.ts.
+Out of scope: token-format changes and unrelated authorization flows.
+## Evidence
+Run bun test tests/auth/session.test.ts and report the observed result.
+## Checkpoint
+At 15 minutes after spawn, report status; continue monitoring until terminal.
+## Dependencies
+None.
 ```
 
-**Blocked** — paths + sections but no Master-TODO:
+**Allowed** — complete read-only scout brief; scouts still need all six sections:
 
 ```text
-vibe_spawn { cli: "good", name: "impl-x", prompt: "## Target Files\nsrc/auth.ts\n## Acceptance Criteria\nok" }
-→ SLOP_GUARD_BLOCKED: Master-TODO checklist has not been initialized!
+## Goal
+Map the authentication flow and its entry points.
+## Done when
+The verified entry points and high-level flow are reported.
+## Scope / Non-goals
+Read-only discovery of authentication code; do not edit files.
+## Evidence
+Cite verified paths, signatures, and data flow; label unknowns explicitly.
+## Checkpoint
+At 10 minutes after spawn, report status; continue monitoring until terminal.
+## Dependencies
+None.
 ```
 
-**Blocked** — paths but no structure:
-
-```text
-vibe_spawn { cli: "good", name: "impl-x", prompt: "## Target Files\nsrc/auth.ts — fix it" }
-→ SLOP_GUARD_BLOCKED: Implementation brief lacks structured specification.
-```
-
-**Allowed** — cited file was read + todo initialized + paths + ≥2 sections:
-
-```text
-vibe_spawn {
-  cli: "good",
-  name: "impl-auth",
-  prompt: "## Target Files\nsrc/auth/session.ts\n## Current Contract\nvalidate(token): boolean\n## Required Delta\nadd expiry check\n## Acceptance Criteria\nbun test passes"
-}
-→ permitted
-```
-
-**Allowed** — scout, no ceremony:
-
-```text
-vibe_spawn { cli: "fast", name: "recon-auth", prompt: "Search the repo for auth flow. Do NOT edit code." }
-→ permitted immediately
-```
 
 ## Installation
 
@@ -124,7 +127,7 @@ Pin a release in `~/.omp/plugins/package.json`:
 ```json
 {
   "dependencies": {
-    "omp-context-kit": "github:stgmt/omp-context-kit#v0.1.1"
+    "omp-context-kit": "github:stgmt/omp-context-kit#v0.2.0"
   }
 }
 ```

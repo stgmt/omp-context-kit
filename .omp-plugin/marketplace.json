@@ -5,15 +5,15 @@
     "name": "stgmt"
   },
   "metadata": {
-    "description": "Vibe Director Anti-Slop Guard for Oh My Pi vibe mode.",
-    "version": "0.1.1"
+    "description": "Enforces verified Vibe Director orchestration and complete six-section worker briefs for OMP Vibe Mode.",
+    "version": "0.2.0"
   },
   "plugins": [
     {
       "name": "omp-context-kit",
       "source": "./",
-      "description": "Enforces the 4-phase recon-audit-digest-dispatch pipeline in OMP Vibe Mode.",
-      "version": "0.1.1",
+      "description": "Enforces the five-phase Vibe Director protocol and six-section worker-brief contract in OMP Vibe Mode.",
+      "version": "0.2.0",
       "author": {
         "name": "stgmt"
       },

@@ -52,6 +52,15 @@ const vibeMessage = () => ({
 
 const spawn = (input: Record<string, unknown>) =>
 	runner.emitToolCall({ type: "tool_call", toolName: "vibe_spawn", toolCallId: `e2e-${crypto.randomUUID()}`, input });
+const workerBrief = (scope: string, goal = "Complete the scoped task."): string =>
+	[
+		["Goal", goal],
+		["Done when", "The requested behavior is observable and verified."],
+		["Scope / Non-goals", scope],
+		["Evidence", "Return the behavior checked and its result."],
+		["Checkpoint", "15m after spawn."],
+		["Dependencies", "None"],
+	].map(([heading, body]) => "## " + heading + "\n" + body).join("\n\n");
 
 describe("e2e — live ExtensionRunner chain", () => {
 	test("loader binds dist/extension.js without errors", () => {
@@ -62,6 +71,17 @@ describe("e2e — live ExtensionRunner chain", () => {
 	test("emitContext rewrites vibe-mode-context through the real pipeline", async () => {
 		const result = await runner.emitContext([vibeMessage()]);
 		expect(result[0]?.content).toContain("Zero-Slop Execution Pipeline");
+		for (const heading of [
+			"## Goal",
+			"## Done when",
+			"## Scope / Non-goals",
+			"## Evidence",
+			"## Checkpoint",
+			"## Dependencies",
+		]) {
+			expect(result[0]?.content).toContain(heading);
+			expect(result[0]?.content).not.toContain(heading + ":");
+		}
 	});
 
 	test("emitContext leaves foreign customType messages untouched", async () => {
@@ -71,12 +91,32 @@ describe("e2e — live ExtensionRunner chain", () => {
 	});
 
 	test("recon scout spawn is permitted with zero reads", async () => {
-		const res = await spawn({ cli: "fast", name: "recon-api", prompt: "find auth files" });
+		const res = await spawn({
+			cli: "fast",
+			name: "recon-api",
+			prompt: workerBrief("Read-only search for auth files; do not edit.", "Find authentication implementation files."),
+		});
 		expect(res?.block).toBeUndefined();
 	});
 
-	test("implementation worker is blocked at zero reads with SLOP_GUARD_BLOCKED", async () => {
-		const res = await spawn({ cli: "good", name: "impl-x", prompt: "## Target Files\nsrc/x.ts\n## Acceptance Criteria\nok" });
+	test("incomplete brief blocks before scout bypass in the live runner", async () => {
+	const incompleteBrief = workerBrief("In scope: src/index.ts.").replace(/^## Evidence\n.*$/m, "");
+	const res = await spawn({
+		cli: "fast",
+		name: "recon-missing-evidence",
+		prompt: incompleteBrief,
+	});
+	expect(res?.block).toBe(true);
+	expect(res?.reason).toStartWith("SLOP_GUARD_BLOCKED");
+	expect(res?.reason).toContain("Missing ## Evidence");
+});
+
+test("implementation worker is blocked at zero reads with SLOP_GUARD_BLOCKED", async () => {
+		const res = await spawn({
+			cli: "good",
+			name: "impl-x",
+			prompt: workerBrief("In scope: src/x.ts; no unrelated files."),
+		});
 		expect(res?.block).toBe(true);
 		expect(res?.reason).toStartWith("SLOP_GUARD_BLOCKED");
 	});
@@ -91,7 +131,7 @@ describe("e2e — live ExtensionRunner chain", () => {
 		const res = await spawn({
 			cli: "good",
 			name: "impl-y",
-			prompt: "## Target Files\nsrc/vibe/classifier.ts\n## Acceptance Criteria\nbun test passes",
+			prompt: workerBrief("In scope: src/vibe/classifier.ts; no unrelated files."),
 		});
 		expect(res?.block).toBe(true);
 		expect(res?.reason).toContain("Master-TODO");
@@ -113,7 +153,7 @@ describe("e2e — live ExtensionRunner chain", () => {
 		const res = await spawn({
 			cli: "good",
 			name: "impl-x",
-			prompt: "## Target Files\nsrc/vibe/gate.ts\n## Acceptance Criteria\nbun test passes",
+			prompt: workerBrief("In scope: src/vibe/gate.ts; do not edit unrelated files."),
 		});
 		expect(res?.block).toBeUndefined();
 	});

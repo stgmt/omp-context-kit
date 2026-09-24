@@ -32,7 +32,27 @@ describe("regression — non-vibe tools pass through unmodified", () => {
 		for (const toolName of ["bash", "edit", "write", "grep", "glob", "task"]) {
 			await toolCall({ toolName, input: {} });
 		}
-		const res = await toolCall({ toolName: "vibe_spawn", input: { cli: "good", name: "impl-x", prompt: "x" } });
+		const res = await toolCall({
+	toolName: "vibe_spawn",
+	input: {
+		cli: "good",
+		name: "impl-x",
+		prompt: [
+			"## Goal",
+			"Complete the focused implementation.",
+			"## Done when",
+			"The focused behavior is complete.",
+			"## Scope / Non-goals",
+			"In scope: src/index.ts. Out of scope: unrelated changes.",
+			"## Evidence",
+			"Report the test result.",
+			"## Checkpoint",
+			"Check status 10 minutes after spawn.",
+			"## Dependencies",
+			"None.",
+		].join("\n"),
+	},
+});
 		expect(res?.block).toBe(true);
 		expect(res?.reason).toContain("has not read");
 	});

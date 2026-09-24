@@ -6,5 +6,5 @@
 
 ## Synthetic Test Fixtures
 - `blind-spawn-input`: High-level prompt lacking file paths and contract details.
-- `grounded-brief-input`: Fully specified brief with markdown section anchors and valid filesystem paths.
+- `grounded-brief-input`: Valid brief with one nonempty `Goal`, `Done when`, `Scope / Non-goals`, `Evidence`, `Checkpoint`, and `Dependencies` section; targets cite verified filesystem paths and the checkpoint gives a positive elapsed duration.
 - `disguised-recon-input`: Fast CLI call containing implementation verbs without reconnaissance intent.
